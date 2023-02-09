@@ -4,7 +4,10 @@ use kaydle_primitives::{
     property::{Property, RecognizedProperty},
     string::KdlString,
 };
-use serde::{de, Deserializer as _};
+use serde::{
+    de::{self, Error as _},
+    Deserialize, Deserializer as _,
+};
 use serde_mobile::SubordinateValue;
 
 use super::{
@@ -175,17 +178,29 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de, '_> {
         self.deserialize_primitive_value(visitor)
     }
 
-    fn deserialize_option<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        // Need to visit Some or None. Need to also preserve annotation.
+        // TODO:
+        // Need to preserve annotation.
         // Probably need to do something sensible with children.
         // General design thoughts: We can probably treat a node as either an
         // aggregate or a primitive (that is to say, we shouldn't worry about
         // the Option<Vec<i32>> case). This means that if we field a request
-        // for an Option, we should probably treat it as an optional primitive
-        todo!("Deserializing nodes into options is not implemented yet")
+        // for an Option, we should probably treat it as an optional primitive.
+
+        let result = if let Some("null") = self.node.item.remaining().trim_start().get(..4) {
+            self.deserialize_primitive_value(visitor)
+        } else {
+            visitor.visit_some(self)
+        };
+
+        result.map_err(|e| {
+            Self::Error::custom(format!(
+                "Support for Option<T> is experimental. Original error: {e}"
+            ))
+        })
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value, Self::Error>
@@ -363,16 +378,20 @@ impl<'de> de::Deserializer<'de> for Deserializer<'de, '_> {
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        todo!(
-            "Deserializing anonymous nodes into enums isn't implemented yet \
-            (did you mean to add #[serde(transparent)] to an enclosing \
-            newtype struct?)"
-        )
+        let string_variant = KdlString::deserialize(self).map_err(|e| {
+            Self::Error::custom(format!(
+                "Support for enums is experimental. \
+                Only KDL string values are currently supported for enums variants. \
+                Original error: {e}"
+            ))
+        })?;
+
+        visitor.visit_enum(StringDeserializer::new(string_variant))
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value, Self::Error>

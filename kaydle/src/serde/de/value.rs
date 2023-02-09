@@ -1,7 +1,7 @@
 use kaydle_primitives::{
     annotation::{AnnotatedValue, GenericAnnotated, RecognizedAnnotationValue},
     string::KdlString,
-    value::KdlValue,
+    value::{GenericValue, KdlValue},
 };
 use serde::{
     de::{self, value::BorrowedStrDeserializer},
@@ -51,10 +51,31 @@ where
         self.value.item.visit_to(visitor)
     }
 
+    fn deserialize_enum<V>(
+        self,
+        name: &'static str,
+        variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: de::Visitor<'de>,
+    {
+        {
+            let this = self.value.item;
+            match this {
+                GenericValue::Null => visitor.visit_unit(),
+                GenericValue::Bool(value) => visitor.visit_bool(value),
+                GenericValue::Number(value) => value.visit_to(visitor),
+                GenericValue::String(value) => super::string::Deserializer::new(value)
+                    .deserialize_enum(name, variants, visitor),
+            }
+        }
+    }
+
     forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
         bytes byte_buf unit unit_struct seq tuple tuple_struct map
-        identifier enum newtype_struct
+        identifier newtype_struct
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>

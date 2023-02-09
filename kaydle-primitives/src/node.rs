@@ -341,6 +341,11 @@ pub struct NodeContent<'i, 'p> {
 }
 
 impl<'i, 'p> NodeContent<'i, 'p> {
+    /// Get the remaining content of the document.
+    pub fn remaining(&self) -> &str {
+        self.state
+    }
+
     /// Get the next piece of content from a node. This can be an argument,
     /// a property, a set of children, or [`End`][NodeEvent::End] if the node
     /// is done.
